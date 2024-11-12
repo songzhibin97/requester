@@ -1,14 +1,17 @@
 package requester
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"html/template"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/go-resty/resty/v2"
+	sprig "github.com/go-task/slim-sprig/v3"
 	"github.com/moul/http2curl"
 	"github.com/songzhibin97/go-baseutils/base/banytostring"
 	"github.com/songzhibin97/go-baseutils/base/breflect"
@@ -29,20 +32,22 @@ type Requester struct {
 	URL    string `json:"url"`
 	Method Method `json:"method"`
 
-	Headers map[string]string `json:"headers"`
-	Params  map[string]string `json:"params"`
-	Body    []byte            `json:"body"`
+	Headers   map[string]string `json:"headers"`
+	Params    map[string]string `json:"params"`
+	Body      []byte            `json:"body"`
+	BodyParam map[string]string `json:"bodyParam"`
 
 	ParseResponseValue map[string]string `json:"parseResponseValue"`
 }
 
-func NewRequester(url string, method Method, header, param map[string]string, body []byte, parseResponseValue map[string]string) *Requester {
+func NewRequester(url string, method Method, header, param map[string]string, body []byte, bodyParam map[string]string, parseResponseValue map[string]string) *Requester {
 	return &Requester{
 		URL:                url,
 		Method:             method,
 		Headers:            header,
 		Params:             param,
 		Body:               body,
+		BodyParam:          bodyParam,
 		ParseResponseValue: parseResponseValue,
 	}
 }
@@ -51,7 +56,7 @@ func NewRequester(url string, method Method, header, param map[string]string, bo
 // debug is true return curl
 // return response, curl , err
 func (r Requester) Request(ctx context.Context, client *resty.Client, debug bool) (any, string, error) {
-	return request[map[string]interface{}](ctx, client, debug, r.URL, r.Method, r.Headers, r.Params, r.Body)
+	return request[map[string]interface{}](ctx, client, debug, r.URL, r.Method, r.Headers, r.Params, r.Body, r.BodyParam)
 }
 
 // ParseResponse
@@ -70,7 +75,7 @@ func (r Requester) ParseResponse(response any) map[string]string {
 	return parse
 }
 
-func request[Response any](ctx context.Context, client *resty.Client, debug bool, url string, method Method, headers map[string]string, payload map[string]string, body []byte) (Response, string, error) {
+func request[Response any](ctx context.Context, client *resty.Client, debug bool, url string, method Method, headers map[string]string, payload map[string]string, body []byte, bodyParam map[string]string) (Response, string, error) {
 	var curl string
 	query := client.SetPreRequestHook(func(client *resty.Client, h *http.Request) error {
 		if debug {
@@ -93,16 +98,30 @@ func request[Response any](ctx context.Context, client *resty.Client, debug bool
 		query = query.SetQueryParam(k, v)
 	}
 
+	var zeroResponse Response
+
 	if len(body) != 0 {
+		// 判断bodyParam是否为空,不为空则使用模版替换
+		if len(bodyParam) != 0 {
+			builder := bytes.Buffer{}
+			t, err := template.New("temp").Funcs(sprig.FuncMap()).Parse(string(body))
+			if err != nil {
+				return zeroResponse, curl, err
+			}
+			err = t.Execute(&builder, bodyParam)
+			if err != nil {
+				return zeroResponse, curl, err
+			}
+			body = builder.Bytes()
+		}
+
 		query = query.SetBody(body)
 	}
 
 	var (
 		response *resty.Response
+		err      error
 	)
-
-	var err error
-	var zeroResponse Response
 
 	switch method {
 	case GET:
