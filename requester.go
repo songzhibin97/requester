@@ -31,22 +31,22 @@ type Requester struct {
 	URL    string `json:"url"`
 	Method Method `json:"method"`
 
-	Headers   map[string]string `json:"headers"`
-	Params    map[string]string `json:"params"`
-	Body      string            `json:"body"`
-	BodyParam map[string]string `json:"bodyParam"`
+	Headers    map[string]string `json:"headers"`
+	Params     map[string]string `json:"params"`
+	Body       string            `json:"body"`
+	BodyParams map[string]string `json:"body_params"`
 
 	ParseResponseValue map[string]string `json:"parseResponseValue"`
 }
 
-func NewRequester(url string, method Method, header, param map[string]string, body string, bodyParam map[string]string, parseResponseValue map[string]string) *Requester {
+func NewRequester(url string, method Method, header, param map[string]string, body string, bodyParams map[string]string, parseResponseValue map[string]string) *Requester {
 	return &Requester{
 		URL:                url,
 		Method:             method,
 		Headers:            header,
 		Params:             param,
 		Body:               body,
-		BodyParam:          bodyParam,
+		BodyParams:         bodyParams,
 		ParseResponseValue: parseResponseValue,
 	}
 }
@@ -55,7 +55,7 @@ func NewRequester(url string, method Method, header, param map[string]string, bo
 // debug is true return curl
 // return response, curl , err
 func (r Requester) Request(ctx context.Context, client *resty.Client, debug bool) (any, string, error) {
-	return request[map[string]interface{}](ctx, client, debug, r.URL, r.Method, r.Headers, r.Params, r.Body, r.BodyParam)
+	return request[map[string]interface{}](ctx, client, debug, r.URL, r.Method, r.Headers, r.Params, r.Body, r.BodyParams)
 }
 
 // ParseResponse
@@ -74,7 +74,7 @@ func (r Requester) ParseResponse(response any) map[string]string {
 	return parse
 }
 
-func request[Response any](ctx context.Context, client *resty.Client, debug bool, url string, method Method, headers map[string]string, payload map[string]string, body string, bodyParam map[string]string) (Response, string, error) {
+func request[Response any](ctx context.Context, client *resty.Client, debug bool, url string, method Method, headers map[string]string, payload map[string]string, body string, bodyParams map[string]string) (Response, string, error) {
 	var curl string
 	query := client.SetPreRequestHook(func(client *resty.Client, h *http.Request) error {
 		if debug {
@@ -101,13 +101,13 @@ func request[Response any](ctx context.Context, client *resty.Client, debug bool
 
 	if len(body) != 0 {
 		// 判断bodyParam是否为空,不为空则使用模版替换
-		if len(bodyParam) != 0 {
+		if len(bodyParams) != 0 {
 			builder := strings.Builder{}
 			t, err := template.New("temp").Funcs(sprig.FuncMap()).Parse(string(body))
 			if err != nil {
 				return zeroResponse, curl, err
 			}
-			err = t.Execute(&builder, bodyParam)
+			err = t.Execute(&builder, bodyParams)
 			if err != nil {
 				return zeroResponse, curl, err
 			}
