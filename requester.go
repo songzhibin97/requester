@@ -99,7 +99,7 @@ func request[Response any](ctx context.Context, client *resty.Client, debug bool
 
 	var zeroResponse Response
 
-	if len(body) != 0 {
+	if method != GET && len(body) != 0 {
 		// 判断bodyParam是否为空,不为空则使用模版替换
 		if len(bodyParams) != 0 {
 			builder := strings.Builder{}
